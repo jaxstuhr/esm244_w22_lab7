@@ -1,0 +1,124 @@
+---
+title: "ESM 244 Winter 2022 - Lab 7 Spatial Data"
+author: "Jaxon Stuhr"
+date: "2/17/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning = FALSE)
+library(tidyverse)
+library(here)
+library(broom)
+library(janitor)
+
+library(sf)
+library(tmap)
+```
+
+# Part 1: Spatial data wrangling and visualization
+
+## California county outlines (polygons)
+
+```{r}
+# label sf b/c spatial dataframe
+ca_counties_sf = read_sf(here("data/ca_counties/CA_counties_TIGER2016.shp"))
+
+ca_subset_sf = ca_counties_sf %>% 
+  clean_names() %>% 
+  select(county_name = name, land_area = aland)
+
+ca_counties_sf = ca_counties_sf %>% 
+  as.data.frame() %>% 
+  select(-geometry)
+```
+
+### Examine and set CRS
+
+```{r}
+# get coord reference info
+# EPSG 3857, code at bottom of output below
+ca_subset_sf %>% st_crs()
+```
+
+```{r}
+# plot it!
+ggplot(data = ca_subset_sf) +
+  geom_sf(aes(fill = land_area), color = 'white', size = 0.1) + 
+  theme_void() + 
+  scale_fill_gradientn(colors = c('cyan', 'blue', 'purple'))
+```
+
+### B. Invsaive Red Sesbanie records (spatial points)
+
+```{r}
+sesbania_sf = read_sf(here('data/red_sesbania', 'ds80.shp')) %>% 
+  clean_names()
+
+# CHeck CRS
+sesbania_sf %>%  st_crs()
+
+### if you know EPSG
+sesbania_3857_sf = st_transform(sesbania_sf, 3857)
+### if you don't know EPSG:
+sesbania_3857_to_sf = st_transform(sesbania_sf, st_crs(ca_subset_sf))
+```
+
+### plot together!
+
+```{r}
+ggplot() + 
+  geom_sf(data = ca_subset_sf) +
+  geom_sf(data = sesbania_3857_sf, size = 1, color = 'red')
+```
+
+```{r}
+ca_sesb_sf = ca_subset_sf %>% 
+  st_join(sesbania_3857_sf)
+
+head(ca_sesb_sf)
+```
+
+```{r}
+sesb_counts_sf = ca_sesb_sf %>% 
+  group_by(county_name) %>% 
+  summarize(n_records = sum(!is.na(id)))
+head(sesb_counts_sf)
+```
+
+```{r}
+ggplot(data = sesb_counts_sf) + 
+  geom_sf(aes(fill = n_records), color = 'white', size = 0.1) + 
+  scale_fill_gradientn(colors = c('lightgrey', 'orange', 'red')) +
+  theme_minimal()+
+  labs(fill = 'Number of S. punicea records')
+```
+
+### Filter to just occurrences in Solano county
+
+```{r}
+### subset solano county
+solano_sesb_sf = sesbania_3857_sf %>% 
+  filter(county == "Solano")
+
+### subset counties based on solano
+solano_sf = ca_subset_sf %>% 
+  filter(county_name == 'Solano')
+
+ggplot() + 
+  geom_sf(data = solano_sf) + 
+  geom_sf(data = solano_sesb_sf, color = 'red')
+```
+
+```{r}
+tmap_mode(mode = 'view')
+tm_shape(ca_subset_sf) +
+  tm_fill('land_area', palette = 'BuGn') + 
+  tm_shape(sesbania_3857_sf) +
+  tm_dots()
+```
+
+
+
+
+
